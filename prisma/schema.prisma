@@ -1,0 +1,411 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  STUDENT
+  INSTRUCTOR
+  ADMIN
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ResourceType {
+  PDF
+  PPT
+  DOC
+  XLS
+  LINK
+  PODCAST
+  VIDEO
+  BOOK
+}
+
+enum AssignmentScope {
+  COURSE
+  MODULE
+  RESOURCE
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  CASE
+  ORDER_PROCESS
+  MULTI_SELECT
+  ERROR_ID
+}
+
+enum SimulationMode {
+  TOPIC_PRACTICE
+  ERROR_REVIEW
+  FULL_SIM
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified")
+  name          String
+  image         String?
+  role          UserRole  @default(STUDENT)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  accounts              Account[]
+  sessions              Session[]
+  enrollments           Enrollment[]
+  instructorAssignments InstructorAssignment[]
+  lessonProgress        LessonProgress[]
+  activityCompletions   ActivityCompletion[]
+  moduleCompletions     ModuleCompletion[]
+  simulationAttempts    SimulationAttempt[]
+  createdResources      Resource[]             @relation("ResourceCreatedBy")
+  createdQuestions      Question[]             @relation("QuestionCreatedBy")
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model LearningPath {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  status      PublishStatus @default(DRAFT)
+  sortOrder   Int           @default(0) @map("sort_order")
+  heroImageUrl String?      @map("hero_image_url")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  courses     Course[]
+  enrollments Enrollment[]
+
+  @@map("learning_paths")
+}
+
+model Course {
+  id             String        @id @default(cuid())
+  learningPathId String        @map("learning_path_id")
+  title          String
+  description    String?
+  status         PublishStatus @default(DRAFT)
+  sortOrder      Int           @default(0) @map("sort_order")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  learningPath LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  modules      Module[]
+
+  @@map("courses")
+}
+
+model Module {
+  id          String        @id @default(cuid())
+  courseId    String        @map("course_id")
+  title       String
+  description String?
+  status      PublishStatus @default(DRAFT)
+  sortOrder   Int           @default(0) @map("sort_order")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  course      Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons     Lesson[]
+  completions ModuleCompletion[]
+
+  @@map("modules")
+}
+
+model Lesson {
+  id          String        @id @default(cuid())
+  moduleId    String        @map("module_id")
+  title       String
+  content     String?       @db.Text
+  status      PublishStatus @default(DRAFT)
+  sortOrder   Int           @default(0) @map("sort_order")
+  estimatedMinutes Int?     @map("estimated_minutes")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  module     Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  activities Activity[]
+  resources  Resource[]
+  progress   LessonProgress[]
+
+  @@map("lessons")
+}
+
+model Activity {
+  id          String        @id @default(cuid())
+  lessonId    String        @map("lesson_id")
+  title       String
+  description String?
+  status      PublishStatus @default(DRAFT)
+  required    Boolean       @default(true)
+  sortOrder   Int           @default(0) @map("sort_order")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  lesson      Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  completions ActivityCompletion[]
+
+  @@map("activities")
+}
+
+model Resource {
+  id             String       @id @default(cuid())
+  title          String
+  description    String?
+  type           ResourceType
+  topic          String?
+  fileKey        String?      @map("file_key")
+  fileName       String?      @map("file_name")
+  mimeType       String?      @map("mime_type")
+  url            String?
+  lessonId       String?      @map("lesson_id")
+  libraryVisible Boolean      @default(true) @map("library_visible")
+  status         PublishStatus @default(DRAFT)
+  createdById    String?      @map("created_by_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  lesson    Lesson? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  createdBy User?   @relation("ResourceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("resources")
+}
+
+model Enrollment {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  learningPathId String   @map("learning_path_id")
+  enrolledAt     DateTime @default(now()) @map("enrolled_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  learningPath LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, learningPathId])
+  @@map("enrollments")
+}
+
+model InstructorAssignment {
+  id        String          @id @default(cuid())
+  userId    String          @map("user_id")
+  scope     AssignmentScope
+  scopeId   String          @map("scope_id")
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scope, scopeId])
+  @@map("instructor_assignments")
+}
+
+model LessonProgress {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  lessonId    String    @map("lesson_id")
+  completed   Boolean   @default(false)
+  completedAt DateTime? @map("completed_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@map("lesson_progress")
+}
+
+model ActivityCompletion {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  activityId  String   @map("activity_id")
+  completedAt DateTime @default(now()) @map("completed_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, activityId])
+  @@map("activity_completions")
+}
+
+model ModuleCompletion {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  moduleId    String   @map("module_id")
+  completedAt DateTime @default(now()) @map("completed_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId])
+  @@map("module_completions")
+}
+
+model Certification {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  title           String
+  passingScore    Int      @default(80) @map("passing_score")
+  questionCount   Int      @default(60) @map("question_count")
+  durationMinutes Int      @default(75) @map("duration_minutes")
+  disclaimer      String   @db.Text
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  blueprints ExamBlueprint[]
+  elements   CompetencyElement[]
+  questions  Question[]
+  attempts   SimulationAttempt[]
+
+  @@map("certifications")
+}
+
+model ExamBlueprint {
+  id              String       @id @default(cuid())
+  certificationId String       @map("certification_id")
+  itemType        QuestionType @map("item_type")
+  count           Int
+
+  certification Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+
+  @@unique([certificationId, itemType])
+  @@map("exam_blueprints")
+}
+
+model CompetencyElement {
+  id              String @id @default(cuid())
+  certificationId String @map("certification_id")
+  code            String
+  title           String
+  sortOrder       Int    @default(0) @map("sort_order")
+
+  certification Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+  questions     Question[]
+
+  @@unique([certificationId, code])
+  @@map("competency_elements")
+}
+
+model Question {
+  id              String       @id @default(cuid())
+  certificationId String       @map("certification_id")
+  elementId       String       @map("element_id")
+  type            QuestionType
+  stem            String       @db.Text
+  explanation     String?      @db.Text
+  active          Boolean      @default(true)
+  createdById     String?      @map("created_by_id")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  certification Certification   @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+  element       CompetencyElement @relation(fields: [elementId], references: [id], onDelete: Restrict)
+  createdBy     User?           @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  options       QuestionOption[]
+  answers       AttemptAnswer[]
+
+  @@map("questions")
+}
+
+model QuestionOption {
+  id           String  @id @default(cuid())
+  questionId   String  @map("question_id")
+  label        String  @db.Text
+  isCorrect    Boolean @default(false) @map("is_correct")
+  correctOrder Int?    @map("correct_order")
+  sortOrder    Int     @default(0) @map("sort_order")
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("question_options")
+}
+
+model SimulationAttempt {
+  id              String         @id @default(cuid())
+  userId          String         @map("user_id")
+  certificationId String         @map("certification_id")
+  mode            SimulationMode
+  status          AttemptStatus  @default(IN_PROGRESS)
+  elementId       String?        @map("element_id")
+  startedAt       DateTime       @default(now()) @map("started_at")
+  endsAt          DateTime?      @map("ends_at")
+  submittedAt     DateTime?      @map("submitted_at")
+  scorePercent    Float?         @map("score_percent")
+  passed          Boolean?
+  questionIds     String[]       @map("question_ids")
+
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  certification Certification     @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+  answers       AttemptAnswer[]
+
+  @@map("simulation_attempts")
+}
+
+model AttemptAnswer {
+  id            String   @id @default(cuid())
+  attemptId     String   @map("attempt_id")
+  questionId    String   @map("question_id")
+  selectedIds   String[] @map("selected_ids")
+  orderedIds    String[] @map("ordered_ids")
+  isCorrect     Boolean? @map("is_correct")
+  answeredAt    DateTime @default(now()) @map("answered_at")
+
+  attempt  SimulationAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@map("attempt_answers")
+}
